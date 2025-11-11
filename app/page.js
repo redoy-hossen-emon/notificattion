@@ -5,58 +5,81 @@ import { PushNotifications } from "@capacitor/push-notifications";
 export default function HomePage() {
   const [token, setToken] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
-    // Ask for notification permission
     const initPush = async () => {
-      const permission = await PushNotifications.requestPermissions();
+      try {
+        // Check current permission
+        const permissionStatus = await PushNotifications.checkPermissions();
 
-      if (permission.receive === "granted") {
-        console.log("Push permission granted");
+        if (permissionStatus.receive !== "granted") {
+          const permission = await PushNotifications.requestPermissions();
+          if (permission.receive !== "granted") {
+            console.warn("Push permission denied");
+            return;
+          }
+        }
+
+        // Register with FCM
         await PushNotifications.register();
-      } else {
-        console.warn("Push permission denied");
+
+        // Listeners
+        PushNotifications.addListener("registration", (tokenData) => {
+          setToken(tokenData.value);
+        });
+
+        PushNotifications.addListener(
+          "pushNotificationReceived",
+          (notification) => {
+            setMessages((prev) => [...prev, notification]);
+            alert("Notification received: " + notification.title);
+          }
+        );
+
+        PushNotifications.addListener(
+          "pushNotificationActionPerformed",
+          (action) => {
+            console.log("Notification clicked:", action);
+          }
+        );
+      } catch (err) {
+        console.error("Push init error:", err);
       }
-
-      // When registration succeeds (we get the FCM token)
-      PushNotifications.addListener("registration", (tokenData) => {
-        console.log("FCM Token:", tokenData.value);
-        setToken(tokenData.value);
-        alert("Token: " + tokenData.value);
-      });
-
-      // When registration fails
-      PushNotifications.addListener("registrationError", (error) => {
-        console.error("Registration error:", error);
-      });
-
-      // When a notification arrives while app is open
-      PushNotifications.addListener(
-        "pushNotificationReceived",
-        (notification) => {
-          console.log("Notification received:", notification);
-          setMessages((prev) => [...prev, notification]);
-          alert("Notification: " + notification.title);
-        }
-      );
-
-      // When a notification is tapped
-      PushNotifications.addListener(
-        "pushNotificationActionPerformed",
-        (action) => {
-          console.log("Notification action performed:", action);
-        }
-      );
     };
 
     initPush();
   }, []);
 
+  const sendTestPush = async () => {
+    if (!token) return alert("Token not ready yet!");
+    setSending(true);
+    try {
+      const res = await fetch("/api/send-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          title: "Hello from App",
+          body: "This is a test push notification!",
+        }),
+      });
+      const data = await res.json();
+      console.log("Push response:", data);
+      alert("Push sent! Check your device.");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to send push: " + err.message);
+    }
+    setSending(false);
+  };
+
   return (
     <main style={{ padding: 20 }}>
       <h1>Push Notification Test</h1>
+
       <p>
-        <strong>Token:</strong>
+        <strong>FCM Token:</strong>
       </p>
       <textarea
         readOnly
@@ -64,6 +87,13 @@ export default function HomePage() {
         rows={5}
         cols={50}
       />
+
+      <div style={{ margin: "20px 0" }}>
+        <button onClick={sendTestPush} disabled={sending}>
+          {sending ? "Sending..." : "Send Test Push"}
+        </button>
+      </div>
+
       <h2>Received Notifications:</h2>
       <pre>{JSON.stringify(messages, null, 2)}</pre>
     </main>
