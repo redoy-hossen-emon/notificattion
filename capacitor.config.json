@@ -3,7 +3,7 @@
   "appName": "notification",
   "webDir": "public",
   "server": {
-    "url": "https://notificattiontest.vercel.app/",
+    "url": "https://notificattion.vercel.app/",
     "cleartext": true
   }
 }
